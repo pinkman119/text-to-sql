@@ -1,18 +1,18 @@
-# langchain-express-boot
+# text-to-sql
 
-基于“约定优于配置”思想，结合 LangChain.js 与 Express.js 打造的 TypeScript 后端启动模板，内置 Sequelize（MySQL）、Agent 调用能力与基础工程化配置。项目组成：60%人工智能 + 40%智能人工
+基于「约定优于配置」思想，使用 **Express 5**、**LangChain / LangGraph** 与 **Sequelize（MySQL）** 搭建的 TypeScript 后端：提供自然语言 **Text-to-SQL Agent**（含 **SSE 纯文本流式** 与一次性 `invoke`）、部门等业务 API，以及分环境配置与基础工程化能力。
 
 ## 1 系统简介
 
-项目面向“快速搭建可扩展后端服务”场景，提供统一配置出口、分环境配置、路由分层与基础错误处理机制，便于在业务开发中快速落地。
+项目面向「自然语言查库 + 可扩展 REST 服务」场景：Agent 相关逻辑集中在 `agent/`（LLM、提示词、工具、服务编排），Web 层在 `app/`（路由、控制器、服务、模型），配置统一从 `config/_index.ts` 出口读取；数据库未就绪时服务仍可先启动，连接失败仅打日志（见 `index.ts`）。
 
 ### 1.1 技术选型
 
-- 语言：TypeScript（Node.js 运行时）
+- 语言：TypeScript（Node.js 运行时，ESM / NodeNext）
 - Web 框架：Express 5
-- Agent / LLM：LangChain、LangGraph、@langchain/openai
+- Agent / LLM：LangChain、`createAgent`（ReAct）、LangGraph 流式、`@langchain/openai`（兼容 DeepSeek 等 OpenAI 兼容端点）
 - 数据库：MySQL + Sequelize
-- 代码质量：ESLint + Prettier
+- 其它：`node-sql-parser`（SQL 相关工具链）、Zod、代码质量 ESLint + Prettier
 - 开发工具：nodemon + cross-env
 
 ### 1.2 VSCode 依赖插件
@@ -20,22 +20,30 @@
 - ESLint（`dbaeumer.vscode-eslint`）
 - Prettier（`esbenp.prettier-vscode`）
 
+### 1.3 目录要点（与 `openspec/project.md` 一致处不重复展开）
+
+- `agent/llm`：如 DeepSeek 封装，从配置读取 `apiKey` / `baseUrl`
+- `agent/prompt`：Text-to-SQL 系统提示、外键约束等
+- `agent/tool`：SQL 校验、执行查询等工具
+- `agent/service`：Agent 组装与 `invoke` / 流式迭代
+- `app/utils/sse.ts`：SSE 响应头与纯文本 `data:` 写出
+
 ## 2 编码风格
 
 ### 2.1 基础风格
 
 - 统一使用 TypeScript，避免新增 JS 文件。
 - 默认 2 空格缩进，语句结尾保留分号。
-- 优先小函数、单一职责，避免“超长函数”与“巨型文件”。
+- 优先小函数、单一职责，避免「超长函数」与「巨型文件」。
 - 异步流程统一使用 `async/await`，避免链式 `then/catch` 过深。
-- 所有 import 置于文件顶部，export 置于文件底部（与现有代码约定保持一致）。
+- 所有 import 置于文件顶部，export 置于文件底部（与 `.cursorrules` / `openspec/project.md` 约定一致）。
 
 ### 2.2 命名相关
 
-- 变量/函数：`camelCase`，例如 `getWeatherByMessage`。
+- 变量/函数：`camelCase`，例如 `streamTextToSqlAgent`。
 - 类型/类/接口：`PascalCase`，例如 `DatabaseConfig`。
 - 常量：`UPPER_SNAKE_CASE`（仅用于真正常量）。
-- 文件命名：按模块语义命名，保持与目录职责一致，例如 `app/service/user.ts`。
+- 文件命名：按模块语义命名，保持与目录职责一致，例如 `app/service/dept.ts`。
 - 枚举映射建议统一收敛到 `config/enums.ts`，避免散落在业务代码中。
 
 ### 2.3 TS 相关
@@ -52,7 +60,7 @@
   - 每张表保留主键、创建时间、更新时间等基础字段。
   - 业务枚举值优先用数字存储，展示文案通过枚举映射转换。
   - 查询高频字段建立索引（如昵称、状态、外键字段）。
-  - 避免在业务代码中写复杂 SQL，优先沉淀到模型层/服务层。
+  - 避免在业务代码中写复杂 SQL，优先沉淀到模型层/服务层；复杂库表结构可参考 `lib/ehr_dev.sql`。
 
 ### 2.5 系统环境
 
@@ -77,21 +85,21 @@
 
 可在系统环境变量中配置，或使用你本地习惯的 `.env` 方案注入（确保不要提交敏感信息）。
 
-sequelize框架会在你运行项目时候检测数据库相关配置，如果未创建对应数据库，`npm run dev`后，**框架会自动帮你创建数据库**。
+Sequelize 会在运行时连接数据库；若本地尚未创建库，可按 `config` 中库名自行创建，或结合 `lib/ehr_dev.sql` 初始化表数据。
 
-### 3.2 配置LLM
+### 3.2 配置 LLM
 
-当前项目在 `config/dev/agent_config.ts` 中维护 `deepseekConfig`：
+在各环境目录下维护 Agent 所需配置（如 `config/dev/agent_config.ts`），一般包含 DeepSeek/OpenAI 兼容接口的：
 
 - `modelName`
 - `apiKey`
 - `baseUrl`
 
-建议将真实密钥迁移为环境变量读取，避免将敏感信息写入仓库。可以使用`lib/agent_config.example`中文件配置创建。
+**请勿将真实密钥提交到仓库**；可复制为本地文件后通过环境变量或私有配置注入（敏感文件已由 `.gitignore` 排除）。
 
-### 3.3 配置opensec
+### 3.3 配置 OpenSpec
 
-项目已接入 OpenSpec 工作流，基础配置位于：
+项目可配合 OpenSpec 工作流，基础配置位于：
 
 - `openspec/config.yaml`
 - `openspec/project.md`
@@ -152,85 +160,80 @@ npm run dev
 其他运行方式：
 
 ```bash
-// 生产环境
+# 生产配置 + nodemon
 npm run dev:prod
-// 测试环境
+# 测试环境 + nodemon
 npm run dev:test
-// 生产环境
+# 生产：先 build 再 node dist
 npm run start
 ```
 
+默认 HTTP 端口为 `3000`，可通过环境变量 `PORT` 覆盖。
+
 ## 4 启动测试
 
-### 4.1 天气助手
+以下示例默认服务地址为 `http://localhost:3000`。
 
-你可以询问当前agent某个员工那边的天气，agent根据语义分解对应员工昵称，并根据员工所在归属地查询员工所处工作地点的天气情况：
+### 4.1 健康检查
 
-0. 执行SQL：
-
-```
-INSERT INTO `tbl_user` VALUES (1, '李佳薇', 1, 1, 1, '小李');
-INSERT INTO `tbl_user` VALUES (2, '李明星', 1, 1, 2, '星星');
+```http
+GET /health
 ```
 
-1. 执行http请求：
+响应示例：
 
+```json
+{ "ok": true }
 ```
-POST | http://localhost:3000/api/users/weather-by-message
+
+### 4.2 Text-to-SQL（SSE 纯文本流）
+
+使用 **Server-Sent Events**，`data:` 负载为**纯文本**（模型与工具产生的可见文本，不含 JSON 包装；结束以连接关闭为准）。
+
+```http
+GET /api/depts/stream?message=<自然语言问题>
+```
+
+示例（终端）：
+
+```bash
+curl -N "http://localhost:3000/api/depts/stream?message=请用一句话说明你能做什么"
+```
+
+浏览器可使用 `EventSource` 订阅（仅支持 GET，与当前接口一致）。
+
+### 4.3 Text-to-SQL（一次性 JSON）
+
+使用 Agent `invoke`，返回 LangGraph 最终状态对象（含 `messages` 等字段），外层仍为统一成功体：
+
+```http
+GET /api/depts?message=<自然语言问题>
+```
+
+响应形态：
+
+```json
 {
-  "message": "小李那边天气怎么样？"
+  "success": true,
+  "data": {}
 }
 ```
 
-2. 返回结果：
+`data` 结构与 LangChain Agent 最终状态一致，便于调试完整对话与工具调用轨迹。
 
-```
-{
-    "success": true,
-    "data": {
-        "nickName": "小李",
-        "city": "北京",
-        "weatherMessage": "根据查询结果，北京当前的天气情况是：\n- **温度**：25°C\n- **天气状况**：🌤️ 多云\n\n这是一个比较舒适的温度，适合外出活动。"
-    }
-}
-```
+### 4.4 部门资源 CRUD
 
-3. 继续请求：
+前缀：`/api/depts`（业务 API 约定见 `openspec/project.md`）。
 
-```
-POST | http://localhost:3000/api/users/weather-by-message
-{
-  "message": "星星呢？"
-}
-```
+| 方法   | 路径             | 说明                              |
+| ------ | ---------------- | --------------------------------- |
+| GET    | `/api/depts/:id` | 按 id 查询部门                    |
+| POST   | `/api/depts`     | 创建部门（body 字段见控制器校验） |
+| PATCH  | `/api/depts/:id` | 更新部门                          |
+| DELETE | `/api/depts/:id` | 删除部门                          |
 
-4. 返回结果
+成功响应：`{ "success": true, "data": ... }`；错误由全局 `error_handler` 返回 `{ "success": false, "message": "..." }`。
 
-```
-{
-    "success": true,
-    "data": {
-        "nickName": "星星",
-        "city": "上海",
-        "weatherMessage": "上海现在的天气是多云，温度为25°C。"
-    }
-}
-```
+---
 
-5. 测试不存在数据库的员工：
-
-```
-POST | http://localhost:3000/api/users/weather-by-message
-{
-  "message": "最后我想问一下vivi那边怎么说"
-}
-```
-
-6. 返回结果
-
-```
-{
-    "success": false,
-    "message": "user not found"
-}
-```
+更完整的架构说明、表名与字段映射约定见 **`openspec/project.md`**。
