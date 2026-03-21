@@ -1,0 +1,64 @@
+# Cursor 项目规则（text-to-sql）
+
+面向本仓库的 AI 助手：生成与修改代码时**默认遵循**以下约定。更完整的架构与目录说明见 `openspec/project.md`。
+
+## 语言与沟通
+
+- 与用户对话使用**简体中文**。
+- 说明变更时写清楚「做了什么、为什么」；避免电报式短句堆砌。
+- 引用已有代码时使用 Cursor 要求的代码引用格式（带行号与路径），便于跳转。
+- 引用外部资料时优先使用 Markdown 链接。
+
+## 代码修改原则
+
+- **只改任务所需**：不做顺手重构、不扩大范围、不删与任务无关的注释或代码；
+- 修改前先读上下文：命名、类型、抽象层次、import 风格与文档粒度应与原文件一致；
+- 优先复用并扩展现有函数与模块，避免重复造轮子；
+- 每一行 diff 都应服务于需求；避免冗长注释、显而易见的 docstring、不必要的防御性 try/catch；
+- UI/Web 若有界面改动，需与现有排版与风格一致；
+- 生成的方法默认需要注释，按照jsdoc的方式进行注释；
+- 当生成代码需要导包import时候，默认将import导包设置在文件头部；到生成代码需要导出export时，默认尽可能只用一次export进行导出，并且放到文件底部，例如：
+
+```
+export type { RuntimeEnvName };
+export { ENV, databaseConfig, deepseekConfig, envDb, sequelize };
+export { constant } from "./constant";
+export { enums } from "./enums";
+```
+
+
+
+## 技术栈与模块边界
+
+- **运行时**：TypeScript（ES2022）、Node.js；模块为 **NodeNext (ESM)**；构建输出到 `dist/`。
+- **Web**：Express 5；路由在 `app/router/`，控制器 `app/controller/`，业务 `app/service/`，Sequelize 模型 `app/model/`。
+- **配置**：业务代码只从 **`config/_index.ts`** 读取配置与 `sequelize`，避免在 model 等层直接读 `process.env`（除非项目已有先例）。
+- **Agent**：`agent/` 下为 LangChain/LangGraph 相关；**尽量避免在 agent/service 里直接做 Web 或数据库细节**，与 `app/service` 协作。
+- **数据库**：MySQL + Sequelize；元数据或工具类查询可参考 `utils/db_tools.ts` 等信息表用法。
+
+## 分层与数据流
+
+- **Router**：HTTP 方法与路径，用 `wrap(fn)` 包装 async controller；不写业务逻辑。
+- **Controller**：解析 `req`，校验参数，调用 Service，按约定返回 JSON；业务错误用 `throw new HttpError(status, message)`。
+- **Service**：业务与数据访问，不引用 Request/Response。
+- **Model**：表名、字段映射、关联在 `app/model/_index.ts` 等处统一约定。
+
+## API 约定
+
+- 业务 API 前缀 **`/api/`**；成功体 `{ success: true, data?: T }`；错误由全局 `error_handler` 统一为 `{ success: false, message, details? }`。
+
+## 风格与仓库习惯
+
+- TypeScript **strict**；格式化遵循 Prettier（双引号、分号、尾逗号等）与 EditorConfig（2 空格、LF）。
+- **命名**：模型/类 PascalCase；路由与 controller 方法按资源+动作；表名约定 `tbl_<资源>`，模型属性 camelCase，`field` 映射 DB 的 snake_case（见 `openspec/project.md`）。
+- **导入导出**：import 放在文件顶部；**每个文件尽可能单一 export，且 export 放在文件底部**（与 `openspec/project.md` 一致）。
+
+## OpenSpec 与变更
+
+- 新增或修改能力时保持上述分层与响应格式；数据库结构变更需同步 `lib/` 下 SQL 与 model。
+- 敏感配置不提交真实密钥；沿用示例与 `.gitignore` 约定。
+
+## 任务执行
+
+- 在真实环境中**主动运行**命令与工具完成验证（如 `tsc`、`eslint`），不要只把命令写给用户。
+- 遇到失败时尝试替代方案或诊断后再试，不要轻易放弃。

@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": [
+    "index.ts",
+    "app/**/*.ts",
+    "config/**/*.ts",
+    "agent/**/*.ts",
+    "utils/**/*.ts",
+    "types/**/*.d.ts",
+    "agent/prompt/foreign_key_constraint"
+  ],
+  "exclude": ["node_modules", "dist"]
+}
