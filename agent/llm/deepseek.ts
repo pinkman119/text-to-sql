@@ -11,6 +11,8 @@ function createDeepSeekLLM() {
   return new ChatOpenAI({
     modelName: deepseekConfig.modelName,
     temperature: 0.7,
+    maxRetries: 10,
+    timeout: 10000,
     apiKey: deepseekConfig.apiKey,
     configuration: {
       baseURL: deepseekConfig.baseUrl,

@@ -1,8 +1,10 @@
 import type { Request, Response } from "express";
-import { createTextToSqlAgent, streamTextToSqlAgent } from "../../agent/service/text_to_sql";
+import { createTextToSqlAgent, streamTextToSqlAgent } from "../../agent/skill/text_to_sql";
 import { HttpError } from "../middleware/error_handler";
 import { initSseResponse, writeSseText } from "../utils/sse";
 import { createDept, deleteDept, getDept, updateDept } from "../service/dept";
+import { agent } from "../../agent/tool/context";
+
 function numParam(req: Request, name: string): number {
   const n = Number(req.params[name]);
   if (!Number.isFinite(n)) throw new HttpError(400, `invalid param: ${name}`);
@@ -11,7 +13,19 @@ function numParam(req: Request, name: string): number {
 
 async function deptList(req: Request, res: Response) {
   const message = req.query.message as string;
-  const result = await createTextToSqlAgent(message);
+  const result = await agent.invoke(
+    // context
+    { messages: [{ role: "user", content: message }] },
+    {
+      context: {
+        userId: "119",
+        sessionId: "119",
+      },
+      configurable: {
+        myConfig: { name: "自毁程序配置" },
+      },
+    },
+  );
   res.json({ success: true, data: result });
 }
 
